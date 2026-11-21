@@ -28,7 +28,7 @@ valid_date() {
 }
 
 view_rooms() {
-    echo -e "\n--- ROOM DIRECTORY ---"
+    echo -e "\nRoom Directory: "
     printf "%-10s %-12s %-15s %-10s\n" "RoomNo" "Type" "Status" "Price/Night"
  
     while IFS=',' read -r room_no type status price; do
@@ -86,7 +86,6 @@ book_room() {
 check_in() {
     echo -e "\n To check in: "
     grep ",Pending$" "$bookings_db" | awk -F',' '{printf "Room: %s | Guest: %s | Date: %s | Nights: %s\n", $1, $2, $3, $4}'
-    echo "-------------------------"
 
     read -p "Enter Room Number for Check-In: " room_no
 
@@ -100,7 +99,7 @@ check_in() {
 
 init_db
 while true; do
-    echo -e "\n=== HOTEL BOOKING SYSTEM ==="
+    echo -e "\nHotel Booking System: "
     echo "1. View Room Database"
     echo "2. Book a Room"
     echo "3. Guest Check-In"
