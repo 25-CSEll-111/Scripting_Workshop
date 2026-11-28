@@ -9,6 +9,34 @@ input_closed() {
     exit 0
 }
 
+
+search_guest() {
+    echo "Guest Search"
+
+    read -r -p "Enter Guest Name or Booking ID: " search
+
+    found=0
+
+    while IFS=',' read -r id room guest checkin checkout nights status
+    do
+        if [[ "$id" == "$search" || "$guest" == *"$search"* ]]; then
+            echo "Booking ID: $id"
+            echo "Guest Name: $guest"
+            echo "Room Number: $room"
+            echo "Check-In: $checkin"
+            echo "Check-Out: $checkout"
+            echo "Status: $status"
+            echo "----------------------"
+
+            found=1
+        fi
+    done < "$bookings_db"
+
+    if [[ $found -eq 0 ]]; then
+        echo "No matching guest found."
+    fi
+}
+
 init_db() {
     if [[ ! -f "$rooms_db" ]]; then
         cat <<EOF > "$rooms_db"
@@ -268,7 +296,8 @@ while true; do
     echo "4. Guest Check-Out"
     echo "5. Cancel Booking"
     echo "6. View All Bookings"
-    echo "7. Exit"
+    echo "7. Search guest"
+    echo "8. Exit"
     read -r -p "Choose an option [1-7]: " choice || [[ -n "$choice" ]] || input_closed
 
     case $choice in
@@ -278,7 +307,8 @@ while true; do
         4) check_out ;;
         5) cancel_booking ;;
         6) view_bookings ;;
-        7) echo "Exiting system. Goodbye!"; exit 0 ;;
+        7) search_guest ;;
+        8) echo "Exiting system. Goodbye!"; exit 0 ;;
         *) echo "Invalid option. Please try again." ;;
     esac
 done
