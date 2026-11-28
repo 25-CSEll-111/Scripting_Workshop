@@ -9,6 +9,38 @@ input_closed() {
     exit 0
 }
 
+
+search_guest() {
+    echo "Guest Search"
+
+    read -r -p "Enter Guest Name or Booking ID: " search
+
+    found=0
+
+    while IFS=',' read -r id room guest phone email guests requests checkin checkout nights status
+    do
+        if [[ "$id" == "$search" || "$guest" == *"$search"* ]]; then
+            echo "Booking ID: $id"
+            echo "Guest Name: $guest"
+            echo "Phone Number: $phone"
+            echo "Email: $email"
+            echo "Number of Guests: $guests"
+            echo "Special Requests: $requests"
+            echo "Room Number: $room"
+            echo "Check-In: $checkin"
+            echo "Check-Out: $checkout"
+            echo "Status: $status"
+            echo "----------------------"
+
+            found=1
+        fi
+    done < "$bookings_db"
+
+    if [[ $found -eq 0 ]]; then
+        echo "No matching guest found."
+    fi
+}
+
 init_db() {
     if [[ ! -f "$rooms_db" ]]; then
         cat <<EOF > "$rooms_db"
@@ -67,8 +99,8 @@ valid_date() {
 room_status() {
     awk -F',' -v r="$1" -v today="$(date +%Y%m%d)" '
         function ymd(d) { return (substr(d, 7, 4) substr(d, 4, 2) substr(d, 1, 2)) + 0 }
-        $2 == r && $7 == "Checked-In" { occupied = 1 }
-        $2 == r && $7 == "Pending" && ymd($4) <= today + 0 && today + 0 < ymd($5) { booked = 1 }
+        $2 == r && $11 == "Checked-In" { occupied = 1 }
+        $2 == r && $11 == "Pending" && ymd($8) <= today + 0 && today + 0 < ymd($9) { booked = 1 }
         END { print (occupied ? "Occupied" : (booked ? "Booked" : "Available")) }
     ' "$bookings_db"
 }
@@ -76,8 +108,8 @@ room_status() {
 find_clashes() {
     awk -F',' -v r="$1" -v s="$2" -v e="$3" '
         function ymd(d) { return (substr(d, 7, 4) substr(d, 4, 2) substr(d, 1, 2)) + 0 }
-        $2 == r && ($7 == "Pending" || $7 == "Checked-In") && ymd(s) < ymd($5) && ymd($4) < ymd(e) {
-            printf "  Booking #%s | Guest: %s | %s to %s | %s\n", $1, $3, $4, $5, $7
+        $2 == r && ($11 == "Pending" || $11 == "Checked-In") && ymd(s) < ymd($9) && ymd($8) < ymd(e) {
+            printf "  Booking #%s | Guest: %s | %s to %s | %s\n", $1, $3, $8, $9, $11
         }
     ' "$bookings_db"
 }
@@ -91,13 +123,13 @@ get_booking() {
 }
 
 set_booking_status() {
-    awk -F',' -v id="$1" -v s="$2" 'BEGIN {OFS=","} $1 == id {$7 = s} {print}' "$bookings_db" > "${bookings_db}.tmp" && mv "${bookings_db}.tmp" "$bookings_db"
+    awk -F',' -v id="$1" -v s="$2" 'BEGIN {OFS=","} $1 == id {$11 = s} {print}' "$bookings_db" > "${bookings_db}.tmp" && mv "${bookings_db}.tmp" "$bookings_db"
 }
 
 list_bookings() {
     awk -F',' -v s="$1" '
-        $7 == s {
-            printf "Booking #%s | Room: %s | Guest: %s | %s to %s | Nights: %s\n", $1, $2, $3, $4, $5, $6
+        $11 == s {
+            printf "Booking #%s | Room: %s | Guest: %s | %s to %s | Nights: %s\n", $1, $2, $3, $8, $9, $10
             found = 1
         }
         END { exit !found }
@@ -110,7 +142,7 @@ prompt_booking_id() {
         echo "Error: Booking ID must be digits only."
         return 1
     fi
-    IFS=',' read -r b_id b_room b_guest b_in b_out b_nights b_status <<< "$(get_booking "$booking_id")"
+   IFS=',' read -r b_id b_room b_guest b_phone b_email b_guests b_requests b_in b_out b_nights b_status <<< "$(get_booking "$booking_id")"
     if [[ -z "$b_id" ]]; then
         echo "Error: Booking #$booking_id does not exist."
         return 1
@@ -127,13 +159,17 @@ view_rooms() {
 
 view_bookings() {
     echo -e "\nAll Bookings: "
+
     if [[ ! -s "$bookings_db" ]]; then
         echo "No bookings yet."
         return
     fi
-    printf "%-5s %-6s %-20s %-12s %-12s %-7s %-12s\n" "ID" "Room" "Guest" "Check-In" "Check-Out" "Nights" "Status"
-    while IFS=',' read -r id room guest checkin checkout nights status; do
-        printf "%-5s %-6s %-20s %-12s %-12s %-7s %-12s\n" "$id" "$room" "$guest" "$checkin" "$checkout" "$nights" "$status"
+
+    printf "%-5s %-6s %-15s %-12s %-20s %-10s %-20s %-12s %-12s %-7s %-12s\n" "ID" "Room" "Guest" "Phone" "Email" "Guests" "Requests" "Check-In" "Check-Out" "Nights" "Status"
+
+    while IFS=',' read -r id room guest phone email guests requests checkin checkout nights status
+    do
+        printf "%-5s %-6s %-15s %-12s %-20s %-10s %-20s %-12s %-12s %-7s %-12s\n" "$id" "$room" "$guest" "$phone" "$email" "$guests" "$requests" "$checkin" "$checkout" "$nights" "$status"
     done < "$bookings_db"
 }
 
@@ -160,7 +196,30 @@ book_room() {
         echo "Error: Guest name cannot contain commas."
         return
     fi
+    
+ read -r -p "Enter Customer Phone Number: " phone
+ if ! echo "$phone" | grep -qE '^[0-9]{10}$'; then
+    echo "Error: Enter a valid 10-digit phone number."
+    return
+ fi
 
+ read -r -p "Enter Customer Email: " email
+ if ! echo "$email" | grep -q "@"; then
+    echo "Error: Email must contain @."
+    return
+ fi
+
+ read -r -p "Enter Number of Guests: " guests
+ if ! echo "$guests" | grep -qE '^[1-9][0-9]*$'; then
+    echo "Error: Enter a valid number of guests."
+    return
+ fi
+
+ read -r -p "Enter Special Requests (if any): " requests
+ if [[ -z "$requests" ]]; then
+    requests="None"
+ fi
+ 
     while true; do
         read -r -p "Enter Check-In Date (DD-MM-YYYY): " checkin_date || [[ -n "$checkin_date" ]] || input_closed
         if valid_date "$checkin_date"; then
@@ -188,7 +247,7 @@ book_room() {
     fi
 
     booking_id=$(next_booking_id)
-    echo "${booking_id},${room_no},${guest_name},${checkin_date},${checkout_date},${nights},Pending" >> "$bookings_db"
+    echo "${booking_id},${room_no},${guest_name},${phone},${email},${guests},${requests},${checkin_date},${checkout_date},${nights},Pending" >> "$bookings_db"
     echo "Success! Booking #$booking_id: Room $room_no for $guest_name, $checkin_date to $checkout_date."
 }
 
@@ -268,7 +327,8 @@ while true; do
     echo "4. Guest Check-Out"
     echo "5. Cancel Booking"
     echo "6. View All Bookings"
-    echo "7. Exit"
+    echo "7. Search guest"
+    echo "8. Exit"
     read -r -p "Choose an option [1-7]: " choice || [[ -n "$choice" ]] || input_closed
 
     case $choice in
@@ -278,7 +338,8 @@ while true; do
         4) check_out ;;
         5) cancel_booking ;;
         6) view_bookings ;;
-        7) echo "Exiting system. Goodbye!"; exit 0 ;;
+        7) search_guest ;;
+        8) echo "Exiting system. Goodbye!"; exit 0 ;;
         *) echo "Invalid option. Please try again." ;;
     esac
 done
